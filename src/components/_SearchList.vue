@@ -1,5 +1,5 @@
 <template>
-  <div class="info-list-pannel" ref="pannel" @scroll="onScroll" :style="{'max-height': defaultSetting.height + 'px', 'width': defaultSetting.width + 'px', 'left': position.left + 'px', 'top': position.top + 'px'}">
+  <div v-show="isShow" class="info-list-pannel" ref="pannel" @scroll="onScroll" :style="{'max-height': defaultSetting.height + 'px', 'width': defaultSetting.width + 'px', 'left': position.left + 'px', 'top': position.top + 'px'}">
     <div class="list-bg" :style="{'height': infoList.length * defaultSetting.lineHeight + 'px'}">
     </div>
     <div class="info-list" ref="infoListContent">
@@ -19,12 +19,30 @@ export default {
     },
     position: {
       type: Object
+    },
+    isShow: {
+      type: Boolean
     }
   },
   watch: {
+    isShow() {
+      if (this.isShow) {
+        this.$nextTick(() => {
+          this.$refs.pannel.scrollTop = 0
+          this.$refs.infoListContent.style.transform = `translateY(0)`
+          //避免重复渲染首屏
+          this.cacheLineHeight = [-1, 1]
+        })
+        this.showList = this.infoList.slice(0, this.partSize * 2)
+      }
+    },
     infoList() {
-      this.$refs.infoListContent.style.transform = `translateY(0)`
-      this.$refs.pannel.scrollTop = 0
+      this.$nextTick(() => {
+        this.$refs.pannel.scrollTop = 0
+        this.$refs.infoListContent.style.transform = `translateY(0)`
+        //避免重复渲染首屏
+        this.cacheLineHeight = [-1, 1]
+      })
       this.showList = this.infoList.slice(0, this.partSize * 2)
     }
   },
@@ -52,6 +70,7 @@ export default {
     },
 
     onScroll(e) {
+      console.log(e.target.scrollTop)
       if (this.ticking) {
         return
       }
@@ -107,8 +126,6 @@ export default {
 <style scoped>
 .info-list-pannel {
   position: absolute;
-  left: 20%;
-  top: 20%;
   background-color: #fff;
   box-shadow: 1px 1px 10px #99999952;
   overflow-y: scroll;

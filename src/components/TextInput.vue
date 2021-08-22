@@ -1,6 +1,6 @@
 <template>
   <div class="text-input-pannel">
-    <div class="textarea" ref="textarea" contenteditable="plaintext-only" @input="onChange"></div>
+    <div class="textarea" ref="textarea" contenteditable="plaintext-only" @input="onChange" @click="resetRange"></div>
     <!-- <textarea 
       v-model="inputVal"
       ref="textarea"
@@ -10,7 +10,7 @@
     </textarea> -->
     <!-- <div ref="text_copy" class="textarea" style="visibility:hidden; position:absolute; left:0; top:0"></div> -->
     <SearchList
-      v-show="showList"
+      :isShow="showSearchListBlock"
       :infoList="searchList"
       :position="position"
       @confirm="confirm">
@@ -20,6 +20,9 @@
 
 <script>
 import SearchList from './_SearchList.vue';
+
+let demoPosition = null
+
 export default {
   name: 'TextInput',
   props: {
@@ -34,19 +37,23 @@ export default {
     SearchList
   },
   mounted() {
-    // this.$refs.textarea.addEventListener('input', (e) => {
-    //   console.log(e)
-    // })
+    demoPosition = this.$refs.textarea.getBoundingClientRect()
+  },
+  watch: {
+    lastEditRange() {
+      console.log(this.lastEditRange.endOffset)
+    }
   },
   data() {
     return {
-      showList: false,
+      showSearchListBlock: false,
       inputVal: '',
       position: {
         left: 20,
         top: 40
       },
       searchList: [],
+      lastEditRange: null,
       filterFlag: false,
       preVal: null,
       atIndex: 0,
@@ -55,83 +62,76 @@ export default {
     }
   },
   methods: {
-    // keyPress(e) {
-    //   if(e.key === '@') {
-    //     // 根据最新的一个@符号进行搜索
-    //     this.searchList = this.totalList
-    //     this.position = this.getPosition()
-    //     this.createFilter()
-    //     this.showList = true
-    //   } else if (e.key === 'Backspace') {
-    //     if (this.filterFlag && this.inputVal.length < this.atIndex) {
-    //       // 正在搜索，但是删除了@
-    //       this.showList = false
-    //       this.searchList = []
-    //       clearTimeout(this.filterTimer)
-    //     }
-    //   }
-    // },
+    // 点击设置光标位置
+    resetRange() {
+      const range = getSelection().getRangeAt(0)
+      // 如果正在过滤，但是用户点击了其他文本区域
+      if (this.filterFlag && range.startOffset != this.lastEditRange.startOffset) {
+        this.closeFilter()
+      }
+      this.lastEditRange = range
+    },
+    // 监听输入
     onChange(e) {
       if (e.inputType === 'insertText') {
         if (e.data === '@') {
-          this.getPosition()
+          this.lastEditRange = getSelection().getRangeAt(0)
+          this.position = this.getPosition()
           this.createFilter()
         } else if (this.filterFlag) {
           this.filterKey += e.data
         }
       } else if (e.inputType === 'deleteContentBackward') {
-        if (this.filterFlag && this.filterKey === '') {
-          this.closeFilter()
-        } else if (this.filterFlag && this.filterKey !== '') {
-          this.filterKey = this.filterKey.substr(0, this.filterKey.length - 1)
+        if (this.filterFlag && this.filterKey !== null) {
+          if (this.filterKey === '') {
+            this.filterKey = null
+            this.closeFilter()
+          } else {
+            this.filterKey = this.filterKey.substr(0, this.filterKey.length - 1)
+          }
+        }
+      } else if (e.inputType === 'insertCompositionText') {
+        // 输入中文
+        if (this.filterFlag && e.data && e.data.match(/[\u4e00-\u9fa5]+|[\u0370-\u03ff]+/)) {
+          this.filterKey += e.data
         }
       }
     },
-    getPosition() {
-      
-      // let {offsetLeft, offsetTop} = document.getElementById('anchor')
-      // if (offsetTop > 400) {
-      //   offsetTop = offsetTop - 400
-      // }
-      // return {left: offsetLeft, top: offsetTop + 20};
+    getPosition(win) {
+      win = win || window;
+      var doc = win.document;
+      var sel = doc.selection, range, rect;
+      var x = 0, y = 0;
+      if (sel) {
+        if (sel.type != "Control") {
+          range = sel.createRange();
+          range.collapse(true);
+          x = range.boundingLeft;
+          y = range.boundingTop;
+        }
+      } else if (win.getSelection) {
+        sel = win.getSelection();
+        if (sel.rangeCount) {
+          range = sel.getRangeAt(0).cloneRange();
+          if (range.getBoundingClientRect) {
+            range.collapse(true);
+            rect = range.getBoundingClientRect();
+            x = rect.left;
+            y = rect.top;
+          }
+        }
+      }
+      return {left: x - demoPosition.left, top: y - demoPosition.top + 16}
     },
-    getCaret() {
-      // let target = this.$refs.textarea
-      // if (target.selectionStart) {
-      //     return target.selectionStart;
-      // } else if (!document.selection) {
-      //     return 0;
-      // }
-
-      // var c = "\001",
-      //     sel = document.selection.createRange(),
-      //     dul = sel.duplicate(),
-      //     len = 0;
-
-      // dul.moveToElementText(node);
-      // sel.text = c;
-      // len = dul.text.indexOf(c);
-      // sel.moveStart('character', -1);
-      // sel.text = "";
-      // console.log(len)
-      // return len;
-    },
+    // 开始监听输入，过滤数组
     createFilter() {
       this.filterFlag = true
       this.filterKey = ''
       this.preVal = null
-      // this.atIndex = this.preVal.length
       if (this.filterTimer) {
         clearTimeout(this.filterTimer)
       }
       const handle = () => {
-        // let cur = this.inputVal
-        // let msg = this.inputVal.substring(this.preVal.length, cur.length)
-        // if (this.filterKey === msg) {
-        //   // 查询值没有发生变化
-        //   return this.filterTimer = setTimeout(handle, 500)
-        // }
-        // this.filterKey = msg
         if (this.preVal !== this.filterKey) {
           this.preVal = this.filterKey
           if (this.filterKey) {
@@ -141,20 +141,38 @@ export default {
             this.searchList = this.totalList
           }
         }
-        this.showList = true
+        this.showSearchListBlock = true
         return this.filterTimer = setTimeout(handle, 500)
       }
       handle()
     },
     closeFilter() {
+      this.filterKey = null
+      this.preVal = ''
       this.filterFlag = false
       clearTimeout(this.filterTimer)
-      this.showList = false
+      this.showSearchListBlock = false
     },
     confirm(obj) {
       // this.inputVal = this.inputVal.substr(0, this.atIndex) + obj.name + ' '
-      this.$refs.textarea.innerHTML += obj.name
-      this.$refs.textarea.focus()
+      const selection = getSelection()
+      if (this.lastEditRange) {
+        selection.removeAllRanges()
+        selection.addRange(this.lastEditRange)
+      }
+      const range = selection.getRangeAt(0)
+      const textNode = range.startContainer;
+      const rangeStartOffset = range.startOffset;
+      // textNode.textContent = textNode.textContent.replace(this.filterKey, obj.name)
+      
+      textNode.replaceData(rangeStartOffset, this.filterKey.length, obj.name)
+      range.setStart(textNode, rangeStartOffset + obj.name.length)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+      this.lastEditRange = selection.getRangeAt(0)
+
+      this.closeFilter()
     }
   }
 }
@@ -164,7 +182,6 @@ export default {
 .text-input-pannel {
   position: relative;
   width: 400px;
-  height: 400px;
   margin: 0 auto;
   border: 1px solid #0000ff57;
   border-radius: 5px;
@@ -172,13 +189,15 @@ export default {
 .textarea {
   position: relative;
   width: 100%;
-  height: 100%;
+  /* height: 100%; */
+  min-height: 200px;
   padding: 20px;
   border: none;
   word-break: break-all;
   overflow-x: hidden;
   outline: none;
   font-size: 14px;
+  line-height: 14px;
   overflow-y: auto;
   resize: none;
   column-count: initial !important;
